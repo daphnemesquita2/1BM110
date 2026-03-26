@@ -1,12 +1,8 @@
-##########################################################
-
-#### PART 3: Training the Agent with Action Masking ######
-
-##########################################################
+#PART 3: Training the Agent with Action Masking 
 
 import os
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"  # suppress TensorFlow oneDNN info messages
-os.environ["TF_CPP_MIN_LOG_LEVEL"]  = "3"  # suppress all TensorFlow logging
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"  
+os.environ["TF_CPP_MIN_LOG_LEVEL"]  = "3"  
 
 import pickle
 import numpy as np
@@ -17,66 +13,27 @@ from sb3_contrib.common.wrappers import ActionMasker
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 
-
-# ──────────────────────────────────────────────
-# Seeds — load from Part 2 (requirement: same
-# 3 seeds as Part 2)
-# ──────────────────────────────────────────────
-
 SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
 FIGURES_DIR = os.path.join(SCRIPT_DIR, "figures_part3")
 os.makedirs(FIGURES_DIR, exist_ok=True)
-SEEDS_FILE  = os.path.join(SCRIPT_DIR, "part2_seeds.npy")
 
-if os.path.exists(SEEDS_FILE):
-    SEEDS = [int(x) for x in np.load(SEEDS_FILE)]
-    print(f"Loaded seeds from Part 2: {SEEDS}")
-else:
-    raise FileNotFoundError(
-        "part2_seeds.npy not found — run Part 2 first so the same seeds are used."
-    )
+SEEDS = [9451, 1697, 3229]
 
 
-# ──────────────────────────────────────────────
-# Settings
-# ──────────────────────────────────────────────
-
-TRAIN_TIMESTEPS = 50_000   # required by assignment (same as Part 2)
-TUNE_TIMESTEPS  = 10_000   # reduced for tuning — relative comparison only
-
-
-# ──────────────────────────────────────────────
-# mask_fn: returns the action mask from the env
-# (requirement 5b — implementation left to us)
-# 1 = action is valid, 0 = action is invalid
-# ──────────────────────────────────────────────
+TRAIN_TIMESTEPS = 50_000 
+TUNE_TIMESTEPS  = 10_000  
 
 def mask_fn(env):
     return env.get_mask()
 
+np.random.seed(SEEDS[0])                                                    
+env_inspect = BoundedKnapsackEnv(n_items=200, max_weight=200, mask=True)    
+env_inspect = ActionMasker(env_inspect, mask_fn)                            
+state_space, _    = env_inspect.reset()                                     
+action_space_size = env_inspect.action_space.n                              
 
-# ──────────────────────────────────────────────
-# Requirement 6: Inspect environment
-# ──────────────────────────────────────────────
-
-np.random.seed(SEEDS[0])                                                    # requirement 2
-env_inspect = BoundedKnapsackEnv(n_items=200, max_weight=200, mask=True)    # requirement 5a
-env_inspect = ActionMasker(env_inspect, mask_fn)                            # requirement 5b
-state_space, _    = env_inspect.reset()                                     # requirement 6
-action_space_size = env_inspect.action_space.n                              # requirement 6
-
-print("\n========================================")
-print("Environment Inspection (masked)")
-print("========================================")
 print(f"  State space shape : {state_space.shape}")
 print(f"  Action space size : {action_space_size}")
-print(f"  (3 rows: weights, values, limits  |  201 cols: 200 items + 1 knapsack info)")
-print(f"  Action masking    : enabled — invalid actions set to -inf before softmax")
-
-
-# ──────────────────────────────────────────────
-# Callback: record cumulative reward per episode
-# ──────────────────────────────────────────────
 
 class RewardLoggerCallback(BaseCallback):
     def __init__(self):
@@ -91,20 +48,14 @@ class RewardLoggerCallback(BaseCallback):
             self._current_reward = 0.0
         return True
 
-
-# ──────────────────────────────────────────────
-# Helpers
-# ──────────────────────────────────────────────
-
 def make_masked_env():
     """Creates a fresh masked BoundedKnapsackEnv."""
-    env = BoundedKnapsackEnv(n_items=200, max_weight=200, mask=True)  # requirement 5a
-    return ActionMasker(env, mask_fn)                                  # requirement 5b
-
+    env = BoundedKnapsackEnv(n_items=200, max_weight=200, mask=True)  
+    return ActionMasker(env, mask_fn)                                  
 def train(algo_kwargs, seed, total_timesteps=TRAIN_TIMESTEPS):
-    np.random.seed(seed)                                               # requirement 2
+    np.random.seed(seed)                                               
     env   = make_masked_env()
-    model = MaskablePPO("MlpPolicy", env, seed=seed, verbose=0,       # requirement 3
+    model = MaskablePPO("MlpPolicy", env, seed=seed, verbose=0,       
                         **algo_kwargs)
     cb = RewardLoggerCallback()
     model.learn(total_timesteps=total_timesteps, callback=cb)
@@ -121,20 +72,10 @@ def aggregate(reward_lists, window=20):
     arr      = np.array([s[:min_len] for s in smoothed])
     return arr.mean(axis=0), arr.std(axis=0)
 
-
-# ──────────────────────────────────────────────
-# PART A: Train MaskablePPO — 3 seeds, 50k steps
-# Using default PPO hyperparameters (same as Part 2)
-# ──────────────────────────────────────────────
-
 mppo_rewards = []
 mppo_models  = []
 
-print("\n========================================")
-print("PART A: Training MaskablePPO (3 seeds, 50k steps each)")
 print(f"  Total runs: {len(SEEDS)}  (1 algorithm x {len(SEEDS)} seeds)")
-print(f"  Hyperparameters: PPO defaults (same as Part 2)")
-print("========================================")
 
 for i, seed in enumerate(SEEDS, 1):
     print(f"\n  [{i}/{len(SEEDS)}] Seed={seed}")
@@ -146,12 +87,7 @@ for i, seed in enumerate(SEEDS, 1):
 
 print("\nAll seeds trained.")
 
-
-# ── Plot training curves (aggregated mean ± std) ──
-
-print("\n----------------------------------------")
-print("Plotting MaskablePPO training curves (mean ± std across 3 seeds) ...")
-print("----------------------------------------")
+#Plot 
 
 mppo_mean, mppo_std = aggregate(mppo_rewards)
 
@@ -170,12 +106,6 @@ print("\n>>> Showing MaskablePPO training curves — close the plot window to co
 plt.show()
 
 
-# ── Evaluate MaskablePPO (all 3 seeds) ──
-
-print("\n----------------------------------------")
-print("Evaluating MaskablePPO (10 episodes per seed, all 3 seeds) ...")
-print("----------------------------------------")
-
 mppo_eval_rewards = []
 for seed, model in zip(SEEDS, mppo_models):
     np.random.seed(seed)                                               # requirement 2
@@ -186,15 +116,7 @@ for seed, model in zip(SEEDS, mppo_models):
 print(f"\nMaskablePPO eval — mean: {np.mean(mppo_eval_rewards):.4f}  "
       f"std: {np.std(mppo_eval_rewards):.4f}  "
       f"best: {np.max(mppo_eval_rewards):.4f}")
-print(f"(Reminder: multiply by 100 for real reward — e.g. 0.93 → 93)")
 
-
-# ──────────────────────────────────────────────
-# PART B: Hyperparameter Tuning
-# Start from PPO defaults, explore new n_steps
-# values to see if masking improves further.
-# At least 3 new values required by assignment.
-# ──────────────────────────────────────────────
 
 def tune(base_kwargs, param_name, values, seeds=SEEDS):
     cache_file = f"cache_tune_MaskablePPO_{param_name}.pkl"
@@ -218,7 +140,6 @@ def tune(base_kwargs, param_name, values, seeds=SEEDS):
 
     with open(cache_file, "wb") as f:
         pickle.dump(results, f)
-    print(f"  Saved to cache: {cache_file}")
     return results
 
 def plot_tune(results, param_name, filename):
@@ -233,29 +154,14 @@ def plot_tune(results, param_name, filename):
     ax.legend(fontsize=8)
     plt.tight_layout()
     plt.savefig(os.path.join(FIGURES_DIR, filename), dpi=150)
-    print(f"\n>>> Showing MaskablePPO – {param_name} tuning plot — close the plot window to continue ...")
     plt.show()
 
-
-print("\n========================================")
-print("PART B: Hyperparameter Tuning")
-print("  Tuning n_steps — at least 3 new values beyond Part 2 PPO tuning")
-print(f"  Using same seeds: {SEEDS}")
-print("========================================")
-
-# n_steps tuning — new values beyond those tested in Part 2 PPO
-print("\n[1/1] Tuning n_steps for MaskablePPO ...")
+# n_steps tuning
+print("\n[1/1] Tuning n_steps")
 ns_results = tune({}, "n_steps", [256, 512, 1024, 2048, 4096])
 plot_tune(ns_results, "n_steps", "tune_mppo_nsteps.png")
 
 
-# ──────────────────────────────────────────────
-# PART C: Compare MaskablePPO vs PPO (Part 2)
-# ──────────────────────────────────────────────
-
-print("\n========================================")
-print("PART C: Comparison — MaskablePPO vs PPO (Part 2)")
-print("========================================")
 
 if os.path.exists(os.path.join(SCRIPT_DIR, "part2_ppo_eval.npy")):
     ppo_eval_rewards = list(np.load(os.path.join(SCRIPT_DIR, "part2_ppo_eval.npy")))
@@ -286,7 +192,19 @@ if ppo_eval_rewards is not None:
     ax.set_title("PPO vs MaskablePPO — Evaluation Performance (3 seeds)")
     plt.tight_layout()
     plt.savefig(os.path.join(FIGURES_DIR, "part3_comparison.png"), dpi=150)
-    print("\n>>> Showing comparison bar chart — close the plot window to continue ...")
     plt.show()
 
-print("\nPart 3 complete.")
+    _, ax = plt.subplots(figsize=(6, 4))
+    bp = ax.boxplot([ppo_eval_rewards, mppo_eval_rewards],
+                    labels=labels, patch_artist=True, widths=0.4)
+    for patch, color in zip(bp["boxes"], colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.7)
+    for element in ["whiskers", "caps", "medians", "fliers"]:
+        for item in bp[element]:
+            item.set_color("black")
+    ax.set_ylabel("Mean eval reward (×0.01 scaled)")
+    ax.set_title("PPO vs MaskablePPO — Evaluation Performance (3 seeds)")
+    plt.tight_layout()
+    plt.savefig(os.path.join(FIGURES_DIR, "part3_comparison_boxplot.png"), dpi=150)
+    plt.show()
